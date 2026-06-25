@@ -371,10 +371,11 @@
   .stock-bar-fill.green { background:var(--success); }
   .stock-bar-fill.yellow { background:var(--warning); }
   .stock-bar-fill.red { background:var(--danger); }
-  .inv-actions { display:flex; gap:8px; }
+  .inv-actions { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .inv-actions .inv-btn { grid-column:1/-1; }
   .inv-input {
-    flex:1; padding:8px 10px; border:1.5px solid var(--border); border-radius:8px;
-    font-family:'Inter',sans-serif; font-size:.85rem; outline:none;
+    width:100%; padding:7px 10px; border:1.5px solid var(--border); border-radius:8px;
+    font-family:'Inter',sans-serif; font-size:.82rem; outline:none;
     transition:border-color .15s;
   }
   .inv-input:focus { border-color:var(--ocean-mid); }
@@ -526,11 +527,20 @@
     <div class="modal-grid">
       <div class="mf full"><label>NOMBRE DEL PESCADO</label><input id="np_name" placeholder="Ej: Bocachico"></div>
       <div class="mf full">
-        <label>URL DE LA FOTO (pega el link de la imagen)</label>
-        <input id="np_image" placeholder="https://..." oninput="previewImg(this.value)">
-        <img id="np_img_preview" src="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px">
+        <label>FOTO DEL PRODUCTO</label>
+        <div id="np_dropzone" onclick="document.getElementById('np_file').click()"
+          style="border:2px dashed var(--border);border-radius:12px;padding:20px;text-align:center;cursor:pointer;transition:border-color .2s;background:var(--sand)">
+          <div id="np_drop_text">
+            <div style="font-size:2rem;margin-bottom:6px">📷</div>
+            <div style="font-size:.85rem;font-weight:600;color:var(--ink-soft)">Toca para elegir una foto</div>
+            <div style="font-size:.72rem;color:#aaa;margin-top:2px">Desde tu celular o computador</div>
+          </div>
+          <img id="np_img_preview" src="" style="display:none;width:100%;height:130px;object-fit:cover;border-radius:8px">
+        </div>
+        <input type="file" id="np_file" accept="image/*" style="display:none" onchange="handleImgFile(this)">
+        <input type="hidden" id="np_image">
       </div>
-      <div class="mf full"><label>EMOJI (si no tienes foto)</label><input id="np_emoji" placeholder="🐟"></div>
+      <div class="mf full"><label>EMOJI (opcional, si no hay foto)</label><input id="np_emoji" placeholder="🐟"></div>
       <div class="mf"><label>PRECIO ($/kg)</label><input id="np_price" type="number" placeholder="18000"></div>
       <div class="mf"><label>STOCK (kg)</label><input id="np_stock" type="number" placeholder="30"></div>
       <div class="mf full"><label>ORIGEN / DESCRIPCIÓN</label><input id="np_origin" placeholder="Río Sinú, Córdoba"></div>
@@ -1000,34 +1010,44 @@ function renderDashboard() {
     <div class="stat-card"><div class="stat-icon purple">⚠️</div><div class="stat-label">Stock bajo</div><div class="stat-value purple">${lowStock.length}</div><div class="stat-delta" style="color:var(--danger)">${lowStock.map(p=>p.name).join(', ')||'—'}</div></div>
   `;
 
-  const days = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
-  const vals = [320,480,210,560,390,710,425];
-  const max = Math.max(...vals);
-  document.getElementById('weekChart').innerHTML = days.map((d,i) => `
+  const days2 = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+  const dayNums = [1,2,3,4,5,6,0];
+  const weekVals = dayNums.map(d => orders.filter(o=>o.status!=='cancelled'&&new Date(o.created_at).getDay()===d).reduce((s,o)=>s+(o.total||0),0));
+  const weekMax = Math.max(...weekVals, 1);
+  document.getElementById('weekChart').innerHTML = days2.map((d,i) => `
     <div class="bar-col">
-      <div class="bar-val">$${vals[i]}k</div>
-      <div class="bar-fill" style="height:${(vals[i]/max)*120}px;background:${i===5?'var(--coral)':'var(--ocean)'}"></div>
+      <div class="bar-val">${weekVals[i]>0?'$'+(weekVals[i]/1000).toFixed(0)+'k':'—'}</div>
+      <div class="bar-fill" style="height:${(weekVals[i]/weekMax)*120}px;background:${weekVals[i]===weekMax&&weekVals[i]>0?'var(--coral)':'var(--ocean)'}"></div>
       <div class="bar-label">${d}</div>
-    </div>`).join('');
+    </div>`).join('') || '<div class="empty-state" style="width:100%"><div class="es-icon">📊</div><p>Sin ventas aún</p></div>';
 
-  const fishData = [
-    { name:'Bocachico', pct:32, color:'#0B4F6C' },
-    { name:'Mojarra',   pct:26, color:'#F4623A' },
-    { name:'Bagre',     pct:18, color:'#27AE60' },
-    { name:'Dorada',    pct:14, color:'#F39C12' },
-    { name:'Otros',     pct:10, color:'#7C4DFF' },
-  ];
-  let offset = 25;
-  const circles = fishData.map(f => {
-    const dash = (f.pct / 100) * 157;
-    const c = `<circle cx="20" cy="20" r="15.9" fill="none" stroke="${f.color}" stroke-width="6" stroke-dasharray="${dash} ${157-dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 20 20)"/>`;
-    offset += dash;
-    return c;
-  }).join('');
-  document.getElementById('donutWrap').innerHTML = `
-    <svg class="donut-svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="15.9" fill="none" stroke="#eee" stroke-width="6"/>${circles}</svg>
-    <div class="donut-legend">${fishData.map(f=>`<div class="legend-item"><div class="legend-dot" style="background:${f.color}"></div>${f.name} <strong>${f.pct}%</strong></div>`).join('')}</div>
-  `;
+  // Productos más pedidos
+  const prodCount2 = {};
+  orders.filter(o=>o.status!=='cancelled').forEach(o => {
+    (o.items||'').split(',').forEach(item => {
+      const match = item.trim().match(/^([^×]+)/);
+      if (match) { const n = match[1].trim(); prodCount2[n] = (prodCount2[n]||0)+1; }
+    });
+  });
+  const topProds = Object.entries(prodCount2).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const colors = ['#0B4F6C','#F4623A','#27AE60','#F39C12','#7C4DFF'];
+  const totalCount = topProds.reduce((s,[,c])=>s+c,0)||1;
+  if (topProds.length === 0) {
+    document.getElementById('donutWrap').innerHTML = '<div class="empty-state" style="width:100%"><div class="es-icon">🐟</div><p>Sin pedidos aún</p></div>';
+  } else {
+    let offset2 = 25;
+    const circles2 = topProds.map(([name,count],i) => {
+      const pct = count/totalCount;
+      const dash = pct * 157;
+      const c = `<circle cx="20" cy="20" r="15.9" fill="none" stroke="${colors[i]}" stroke-width="6" stroke-dasharray="${dash} ${157-dash}" stroke-dashoffset="${-offset2}" transform="rotate(-90 20 20)"/>`;
+      offset2 += dash;
+      return c;
+    }).join('');
+    document.getElementById('donutWrap').innerHTML = `
+      <svg class="donut-svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="15.9" fill="none" stroke="#eee" stroke-width="6"/>${circles2}</svg>
+      <div class="donut-legend">${topProds.map(([name,count],i)=>`<div class="legend-item"><div class="legend-dot" style="background:${colors[i]}"></div>${name} <strong>${count} ped.</strong></div>`).join('')}</div>
+    `;
+  }
 }
 
 // ── ORDERS ─────────────────────────────────────────
@@ -1114,7 +1134,7 @@ function renderInventory() {
         </div>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <button class="inv-toggle ${p.active ? 'active' : 'paused'}" onclick="toggleProduct(${p.id})">${p.active ? 'Activo' : 'Pausado'}</button>
-          <button onclick="deleteProduct(${p.id})" style="background:#FDEDEC;color:var(--danger);border:none;border-radius:8px;padding:4px 8px;cursor:pointer;font-size:.8rem;font-weight:700" title="Eliminar">🗑</button>
+          <button onclick="deleteProduct(${p.id})" style="background:#FDEDEC;color:var(--danger);border:none;border-radius:8px;padding:4px 8px;cursor:pointer;font-size:.8rem;font-weight:700">🗑</button>
         </div>
       </div>
       <div class="stock-bar-wrap">
@@ -1124,12 +1144,20 @@ function renderInventory() {
         </div>
         <div class="stock-bar-bg"><div class="stock-bar-fill ${cls}" style="width:${pct}%"></div></div>
       </div>
-      <div style="font-size:.8rem;color:var(--ink-soft);margin-bottom:4px">Precio: $${p.price.toLocaleString('es-CO')}/kg</div>
-      <div class="inv-actions">
-        <input class="inv-input" id="stock_${p.id}" type="number" placeholder="Nuevo stock (kg)" />
-        <input class="inv-input" id="price_${p.id}" type="number" placeholder="Nuevo precio" />
-        <button class="inv-btn save" onclick="saveProduct(${p.id})">Guardar</button>
+      <div style="font-size:.8rem;color:var(--ink-soft);margin-bottom:10px">Precio actual: <strong>$${p.price.toLocaleString('es-CO')}/kg</strong></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div>
+          <div style="font-size:.68rem;font-weight:600;color:var(--ink-soft);margin-bottom:4px">NUEVO STOCK (kg)</div>
+          <input id="stock_${p.id}" type="number" placeholder="${p.stock}" min="0"
+            style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;font-family:'Inter',sans-serif;outline:none">
+        </div>
+        <div>
+          <div style="font-size:.68rem;font-weight:600;color:var(--ink-soft);margin-bottom:4px">NUEVO PRECIO</div>
+          <input id="price_${p.id}" type="number" placeholder="${p.price}" min="0"
+            style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;font-family:'Inter',sans-serif;outline:none">
+        </div>
       </div>
+      <button class="inv-btn save" style="width:100%;padding:9px" onclick="saveProduct(${p.id})">💾 Guardar cambios</button>
     </div>`;
   }).join('');
 }
@@ -1175,7 +1203,13 @@ async function deleteProduct(id) {
   showToast('🗑 Producto eliminado', 'error');
 }
 
-function closeAddModal() { document.getElementById('addProductModal').classList.remove('open'); }
+function closeAddModal() {
+  document.getElementById('addProductModal').classList.remove('open');
+  document.getElementById('np_img_preview').style.display = 'none';
+  document.getElementById('np_drop_text').style.display = 'block';
+  document.getElementById('np_image').value = '';
+  document.getElementById('np_file').value = '';
+}
 async function saveNewProduct() {
   const name   = document.getElementById('np_name').value.trim();
   const image  = document.getElementById('np_image').value.trim();
@@ -1189,9 +1223,7 @@ async function saveNewProduct() {
   if (SUPABASE_URL !== 'TU_SUPABASE_URL') {
     await sbFetch('/rest/v1/productos', { method:'POST', body: JSON.stringify({ name, image, emoji, price, stock, origin, active:true }) });
   }
-  // Limpiar modal
-  ['np_name','np_image','np_emoji','np_price','np_stock','np_origin'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
-  document.getElementById('np_img_preview').style.display = 'none';
+  ['np_name','np_emoji','np_price','np_stock','np_origin'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
   closeAddModal();
   renderInventory();
   renderCatalog();
@@ -1224,42 +1256,88 @@ function renderClients() {
 
 // ── REPORTS ────────────────────────────────────────
 function renderReports() {
-  const total = orders.filter(o=>o.status!=='cancelled').reduce((s,o)=>s+(o.total||0),0);
-  const done  = orders.filter(o=>o.status==='done').length;
-  const avg   = done > 0 ? Math.round(total / done) : 0;
+  const validOrders = orders.filter(o => o.status !== 'cancelled');
+  const total = validOrders.reduce((s,o) => s + (o.total||0), 0);
+  const done  = orders.filter(o => o.status === 'done').length;
+  const pending = orders.filter(o => o.status === 'pending').length;
+  const cancelled = orders.filter(o => o.status === 'cancelled').length;
+  const avg = done > 0 ? Math.round(total / done) : 0;
+  const uniqueClients = new Set(orders.map(o => o.client_phone)).size;
+
+  // Producto más vendido
+  const prodCount = {};
+  orders.filter(o=>o.status!=='cancelled').forEach(o => {
+    (o.items||'').split(',').forEach(item => {
+      const match = item.trim().match(/^([^×]+)/);
+      if (match) { const n = match[1].trim(); prodCount[n] = (prodCount[n]||0)+1; }
+    });
+  });
+  const topProd = Object.entries(prodCount).sort((a,b)=>b[1]-a[1])[0];
 
   document.getElementById('reportStats').innerHTML = `
-    <div class="stat-card"><div class="stat-icon green">💰</div><div class="stat-label">Ventas totales</div><div class="stat-value green">$${(total/1000).toFixed(0)}k</div></div>
+    <div class="stat-card"><div class="stat-icon green">💰</div><div class="stat-label">Ventas totales</div><div class="stat-value green">$${total.toLocaleString('es-CO')}</div></div>
     <div class="stat-card"><div class="stat-icon blue">📦</div><div class="stat-label">Pedidos entregados</div><div class="stat-value blue">${done}</div></div>
-    <div class="stat-card"><div class="stat-icon orange">📊</div><div class="stat-label">Ticket promedio</div><div class="stat-value orange">$${(avg/1000).toFixed(0)}k</div></div>
-    <div class="stat-card"><div class="stat-icon purple">👥</div><div class="stat-label">Clientes únicos</div><div class="stat-value purple">${new Set(orders.map(o=>o.client_phone)).size}</div></div>
+    <div class="stat-card"><div class="stat-icon orange">📊</div><div class="stat-label">Ticket promedio</div><div class="stat-value orange">$${avg.toLocaleString('es-CO')}</div></div>
+    <div class="stat-card"><div class="stat-icon purple">👥</div><div class="stat-label">Clientes únicos</div><div class="stat-value purple">${uniqueClients}</div></div>
   `;
 
-  const months = ['Ene','Feb','Mar','Abr','May','Jun'];
-  const mvals  = [1200,1850,1400,2200,1900,2600];
-  const mmax = Math.max(...mvals);
-  document.getElementById('monthChart').innerHTML = months.map((m,i)=>`
-    <div class="bar-col">
-      <div class="bar-val">$${mvals[i]}k</div>
-      <div class="bar-fill" style="height:${(mvals[i]/mmax)*120}px"></div>
-      <div class="bar-label">${m}</div>
-    </div>`).join('');
+  // Gráfica de pedidos por día (últimos 7 días reales)
+  const days = [];
+  for (let i=6; i>=0; i--) {
+    const d = new Date(); d.setDate(d.getDate()-i);
+    days.push(d.toISOString().slice(0,10));
+  }
+  const dayLabels = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const dayCounts = days.map(day => ({
+    label: dayLabels[new Date(day+'T12:00:00').getDay()],
+    count: orders.filter(o=>o.status!=='cancelled'&&o.created_at?.startsWith(day)).length,
+    total: orders.filter(o=>o.status!=='cancelled'&&o.created_at?.startsWith(day)).reduce((s,o)=>s+(o.total||0),0)
+  }));
+  const maxTotal = Math.max(...dayCounts.map(d=>d.total), 1);
 
+  const monthChartEl = document.getElementById('monthChart');
+  if (orders.length === 0) {
+    monthChartEl.innerHTML = '<div class="empty-state" style="width:100%"><div class="es-icon">📊</div><p>Aún no hay pedidos registrados</p></div>';
+  } else {
+    monthChartEl.innerHTML = dayCounts.map(d => `
+      <div class="bar-col">
+        <div class="bar-val">${d.total > 0 ? '$'+(d.total/1000).toFixed(0)+'k' : '—'}</div>
+        <div class="bar-fill" style="height:${(d.total/maxTotal)*120}px;background:${d.total===maxTotal&&d.total>0?'var(--coral)':'var(--ocean)'}"></div>
+        <div class="bar-label">${d.label}</div>
+      </div>`).join('');
+  }
+
+  // Resumen financiero real
   document.getElementById('financeSummary').innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px">
       ${[
-        { label:'Ingresos brutos', val:'$'+((total+580000)/1000).toFixed(0)+'k', color:'var(--success)' },
-        { label:'Pedidos cancelados', val:orders.filter(o=>o.status==='cancelled').length, color:'var(--danger)' },
-        { label:'Producto estrella', val:'Bocachico 🐟', color:'var(--ocean)' },
-        { label:'Día con más ventas', val:'Sábado', color:'var(--coral)' },
+        { label:'Total recaudado', val: total > 0 ? '$'+total.toLocaleString('es-CO') : 'Sin ventas aún', color:'var(--success)' },
+        { label:'Pedidos pendientes', val: pending, color:'var(--warning)' },
+        { label:'Pedidos cancelados', val: cancelled, color:'var(--danger)' },
+        { label:'Producto más pedido', val: topProd ? topProd[0]+' ('+topProd[1]+')' : 'Sin datos aún', color:'var(--ocean)' },
       ].map(r=>`<div style="background:var(--sand);border-radius:10px;padding:14px">
         <div style="font-size:.75rem;color:var(--ink-soft);margin-bottom:4px">${r.label}</div>
-        <div style="font-weight:700;color:${r.color};font-size:1.05rem">${r.val}</div>
+        <div style="font-weight:700;color:${r.color};font-size:1rem">${r.val}</div>
       </div>`).join('')}
     </div>`;
 }
 
 // ── PREVIEW IMAGEN ─────────────────────────────────
+function handleImgFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const base64 = e.target.result;
+    document.getElementById('np_image').value = base64;
+    const preview = document.getElementById('np_img_preview');
+    preview.src = base64;
+    preview.style.display = 'block';
+    document.getElementById('np_drop_text').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
 function previewImg(url) {
   const el = document.getElementById('np_img_preview');
   if (url && url.startsWith('http')) {
