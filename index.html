@@ -759,8 +759,9 @@ async function sbFetch(path, opts={}) {
       ...opts
     });
     if (!r.ok) throw new Error(r.status);
-    return r.json();
-  } catch { return null; }
+    const text = await r.text();
+    return text ? JSON.parse(text) : null;
+  } catch(e) { console.error('sbFetch error:', e); return null; }
 }
 
 // ── INIT ───────────────────────────────────────────
@@ -1174,6 +1175,8 @@ async function saveProduct(id) {
   if (np) p.price = parseInt(np);
   if (SUPABASE_URL !== 'TU_SUPABASE_URL') {
     await sbFetch(`/rest/v1/productos?id=eq.${id}`, { method:'PATCH', body: JSON.stringify({ stock: p.stock, price: p.price }) });
+    const updated = await sbFetch('/rest/v1/productos?select=*&order=id');
+    products = updated || products;
   }
   renderInventory();
   renderCatalog();
@@ -1194,9 +1197,12 @@ async function toggleProduct(id) {
 
 async function deleteProduct(id) {
   if (!confirm('¿Seguro que quieres eliminar este producto?')) return;
-  products = products.filter(x => x.id !== id);
   if (SUPABASE_URL !== 'TU_SUPABASE_URL') {
     await sbFetch(`/rest/v1/productos?id=eq.${id}`, { method:'DELETE' });
+    const p = await sbFetch('/rest/v1/productos?select=*&order=id');
+    products = p || [];
+  } else {
+    products = products.filter(x => x.id !== id);
   }
   renderInventory();
   renderCatalog();
@@ -1218,10 +1224,18 @@ async function saveNewProduct() {
   const stock  = parseFloat(document.getElementById('np_stock').value) || 0;
   const origin = document.getElementById('np_origin').value.trim() || 'Colombia';
   if (!name || !price || !stock) { showToast('Completa nombre, precio y stock', 'error'); return; }
-  const newP = { id: Date.now(), name, image, emoji, price, stock, origin, active:true };
-  products.push(newP);
+
   if (SUPABASE_URL !== 'TU_SUPABASE_URL') {
-    await sbFetch('/rest/v1/productos', { method:'POST', body: JSON.stringify({ name, image, emoji, price, stock, origin, active:true }) });
+    await sbFetch('/rest/v1/productos', {
+      method:'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ name, image, emoji, price, stock, origin, active:true })
+    });
+    // Recargar lista completa desde Supabase para evitar duplicados
+    const p = await sbFetch('/rest/v1/productos?select=*&order=id');
+    products = p || [];
+  } else {
+    products.push({ id: Date.now(), name, image, emoji, price, stock, origin, active:true });
   }
   ['np_name','np_emoji','np_price','np_stock','np_origin'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
   closeAddModal();
